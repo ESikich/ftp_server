@@ -80,10 +80,16 @@ Permission matrix:
 | `DELE` | `delete` |
 | `MKD` | `mkdir` |
 
-Start the server with:
+Start the server with the default TOML file:
 
 ```bash
-build/ftp-server -c server.conf
+build/ftp-server
+```
+
+Or point it at a specific file:
+
+```bash
+build/ftp-server -c server.conf.toml
 ```
 
 The `home` path is resolved under `root`, so `bob` can only see files beneath
@@ -100,12 +106,12 @@ The output is the full hash string to paste after `hash =` in the user table.
 ## Usage
 
 ```
-build/ftp-server -c CONFIG [-b ADDR] [-P PORT] [-m PASV_MIN] [-M PASV_MAX]
+build/ftp-server [-c CONFIG] [-b ADDR] [-P PORT] [-m PASV_MIN] [-M PASV_MAX]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-c CONFIG` | required | Server configuration file |
+| `-c CONFIG` | `server.conf.toml` | Server configuration file |
 | `-b ADDR` | `0.0.0.0` | Bind address |
 | `-P PORT` | `2121` | Control port |
 | `-m PASV_MIN` | `50000` | Passive port range start |

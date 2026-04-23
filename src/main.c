@@ -692,7 +692,7 @@ main(int argc, char **argv)
     bool have_root;
     bool have_user;
     bool have_pass;
-    char config_path[PATH_BUF_SIZE];
+    char config_path[PATH_BUF_SIZE] = "server.conf.toml";
     char root_arg[PATH_BUF_SIZE];
     char user_arg[128];
     char hash_arg[256];
@@ -772,7 +772,7 @@ main(int argc, char **argv)
         }
     }
 
-    if (have_config) {
+    if (have_config || !(have_root || have_user || have_pass)) {
         if (load_config_file(config_path, &config) < 0) {
             ftp_fatal("failed to load config '%s': %s",
                 config_path, strerror(errno));

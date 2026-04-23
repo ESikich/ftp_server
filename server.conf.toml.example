@@ -1,10 +1,10 @@
-# server.conf.example - sample operator config for ftp-server.
+# server.conf.toml.example - sample operator config for ftp-server.
 #
 # Generate a password hash with:
 #
 #   openssl passwd -6 -salt ftpserver 'your-password'
 #
-# Paste the resulting hash string into `hash`.
+# Paste the resulting hash string after `hash =`.
 
 root = "/srv/ftp"
 bind = "0.0.0.0"
