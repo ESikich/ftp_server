@@ -49,7 +49,7 @@ build/ftp-server -r /tmp/ftp-root -u alice -p hunter2 -P 2121
 
 ## Testing
 
-The server is tested with the companion [ftp-client](../ftp_client). Client integration tests pass against both the client's own mock servers and the real server.
+The server is tested with the companion [ftp-client](https://github.com/ESikich/ftp_client). Client integration tests pass against both the client's own mock servers and the real server.
 
 To run the client test suite:
 
