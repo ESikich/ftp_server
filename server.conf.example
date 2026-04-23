@@ -1,0 +1,25 @@
+# server.conf.example - sample operator config for ftp-server.
+#
+# Generate a password hash with:
+#
+#   openssl passwd -6 -salt ftpserver 'your-password'
+#
+# Paste the resulting hash string into `hash`.
+
+root = "/srv/ftp"
+bind = "0.0.0.0"
+port = 2121
+pasv_min = 50000
+pasv_max = 50100
+
+[[users]]
+name = "alice"
+hash = "$6$ftpserver$W.gEv68KkenSkpTDtZ/mGL.nun.GJuqzZsXFx5/.XiOhG/gdcWXTAQgexO8jDkHC96G6cN58tliCMrXZtq3iw."
+home = "alice"
+perms = ["read", "write", "delete", "mkdir"]
+
+[[users]]
+name = "bob"
+hash = "$6$ftpserver$S/cjclfGUKh0lhON1MWrQGMbc6bfIaJYICwv6ObI6E.riONdPawFRLolC5RvV7ZcC89dwQRys0WiGqiRBdYGV1"
+home = "shared/reports"
+perms = ["read"]

@@ -1,10 +1,13 @@
 # Makefile - build the FTP server and integration tests.
 
+.DEFAULT_GOAL := all
+
 CC      ?= cc
 CFLAGS  ?= -std=c2x -Wall -Wextra -Wpedantic -Werror -O2
 CPPFLAGS ?= -D_GNU_SOURCE -Iinclude -Isrc
 LDFLAGS ?=
 LDLIBS  ?=
+LDLIBS  += -lcrypt
 
 BUILD_DIR  := build
 BIN        := $(BUILD_DIR)/ftp-server

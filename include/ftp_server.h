@@ -17,6 +17,7 @@ enum {
     PATH_BUF_SIZE    = 1024,   /* max resolved path length */
     PASV_REPLY_SIZE  = 64,     /* "227 Entering Passive Mode (...)\r\n" */
     LIST_LINE_MAX    = 256,    /* one ls-style listing line */
+    FTP_MAX_USERS    = 32,     /* max configured user accounts */
 
     CTRL_IDLE_MS     = 300000, /* 5 min idle control timeout */
     DATA_XFER_MS     = 30000,  /* 30 sec data transfer timeout */
@@ -27,16 +28,30 @@ enum {
 /* Configuration (immutable after startup)                             */
 /* ------------------------------------------------------------------ */
 
+typedef enum {
+    FTP_PERM_READ   = 1u << 0,
+    FTP_PERM_WRITE  = 1u << 1,
+    FTP_PERM_DELETE = 1u << 2,
+    FTP_PERM_MKDIR  = 1u << 3,
+} ftp_perm_t;
+
+typedef struct ftp_user_t {
+    char     username[128];
+    char     password_hash[256];
+    char     home[PATH_BUF_SIZE];    /* absolute base path after validation */
+    unsigned perms;
+} ftp_user_t;
+
 typedef struct {
     char     bind_addr[64];
     uint16_t port;
     char     root[PATH_BUF_SIZE];    /* export root, absolute */
-    char     username[128];
-    char     password[256];
     int      ctrl_timeout_ms;
     uint16_t pasv_port_min;
     uint16_t pasv_port_max;
     int      max_sessions;
+    size_t   user_count;
+    ftp_user_t users[FTP_MAX_USERS];
 } ftp_config_t;
 
 /* ------------------------------------------------------------------ */
@@ -86,6 +101,8 @@ typedef struct {
     int              ctrl_fd;
     session_auth_t   auth;
     char             pending_user[128];
+    const ftp_user_t *user;
+    char             home_root[PATH_BUF_SIZE];
     char             cwd[PATH_BUF_SIZE]; /* logical path, starts with "/" */
     xfer_type_t      xfer_type;
     pasv_t           pasv;

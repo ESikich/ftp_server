@@ -18,6 +18,7 @@
 #define SERVER_BIN  "build/ftp-server"
 #define SERVER_USER "testuser"
 #define SERVER_PASS "testpass"
+#define SERVER_PASS_HASH "$6$ftpserver$W.gEv68KkenSkpTDtZ/mGL.nun.GJuqzZsXFx5/.XiOhG/gdcWXTAQgexO8jDkHC96G6cN58tliCMrXZtq3iw."
 
 /*
  * Fork and exec the server binary.
@@ -28,14 +29,32 @@ server_start(const char *root, uint16_t port,
     uint16_t pasv_min, uint16_t pasv_max)
 {
     pid_t pid;
+    char cfg_path[] = "/tmp/ftp-server-conf-XXXXXX";
     char port_s[8];
     char min_s[8];
     char max_s[8];
+    int cfg_fd;
     int devnull;
 
     snprintf(port_s, sizeof(port_s), "%u", (unsigned)port);
     snprintf(min_s,  sizeof(min_s),  "%u", (unsigned)pasv_min);
     snprintf(max_s,  sizeof(max_s),  "%u", (unsigned)pasv_max);
+
+    cfg_fd = mkstemp(cfg_path);
+    if (cfg_fd < 0) {
+        perror("mkstemp");
+        return -1;
+    }
+    dprintf(cfg_fd,
+        "root = \"%s\"\n"
+        "\n"
+        "[[users]]\n"
+        "name = \"%s\"\n"
+        "hash = \"%s\"\n"
+        "home = \".\"\n"
+        "perms = [\"read\", \"write\", \"delete\", \"mkdir\"]\n",
+        root, SERVER_USER, SERVER_PASS_HASH);
+    close(cfg_fd);
 
     pid = fork();
     if (pid < 0) {
@@ -49,8 +68,7 @@ server_start(const char *root, uint16_t port,
             close(devnull);
         }
         execl(SERVER_BIN, "ftp-server",
-            "-r", root,
-            "-u", SERVER_USER, "-p", SERVER_PASS,
+            "-c", cfg_path,
             "-P", port_s, "-m", min_s, "-M", max_s,
             (char *)NULL);
         _exit(1);

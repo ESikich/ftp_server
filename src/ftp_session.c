@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <crypt.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <stdio.h>
@@ -19,6 +20,12 @@
 /* ------------------------------------------------------------------ */
 /* I/O helpers                                                          */
 /* ------------------------------------------------------------------ */
+
+static ssize_t __attribute__((noinline))
+read_exact(int fd, void *buf, size_t len)
+{
+    return read(fd, buf, len);
+}
 
 static int
 wait_readable(int fd, int timeout_ms)
@@ -87,9 +94,11 @@ read_command(ftp_session_t *sess, ftp_cmd_t *cmd, int timeout_ms)
             return -1;
         }
 
-        nr = read(sess->ctrl_fd,
-            ctrl->data + ctrl->len,
-            sizeof(ctrl->data) - ctrl->len);
+        {
+            size_t space = CTRL_BUF_SIZE - ctrl->len;
+
+            nr = read_exact(sess->ctrl_fd, ctrl->data + ctrl->len, space);
+        }
         if (nr < 0) {
             if (errno == EINTR)
                 continue;
@@ -118,6 +127,26 @@ pasv_close(ftp_session_t *sess)
     }
 }
 
+static int
+require_perm(ftp_session_t *sess, unsigned perm)
+{
+    if (sess->user == NULL || (sess->user->perms & perm) == 0)
+        return ftp_reply_send(sess->ctrl_fd, 550, "Permission denied");
+    return 0;
+}
+
+static int
+password_matches(const char *password, const char *stored_hash)
+{
+    char *derived;
+
+    errno = 0;
+    derived = crypt(password, stored_hash);
+    if (derived == NULL)
+        return 0;
+    return strcmp(derived, stored_hash) == 0;
+}
+
 /* ------------------------------------------------------------------ */
 /* Command handlers                                                     */
 /* ------------------------------------------------------------------ */
@@ -138,6 +167,8 @@ cmd_user(ftp_session_t *sess, const ftp_cmd_t *cmd,
             "Username too long");
     }
 
+    sess->user = NULL;
+    sess->home_root[0] = '\0';
     sess->auth = SESSION_NEED_PASS;
     return ftp_reply_send(sess->ctrl_fd, 331,
         "Password required");
@@ -151,20 +182,29 @@ cmd_pass(ftp_session_t *sess, const ftp_cmd_t *cmd,
         return ftp_reply_send(sess->ctrl_fd, 503,
             "Login with USER first");
 
-    if (strcmp(sess->pending_user, config->username) != 0 ||
-        strcmp(cmd->arg, config->password) != 0) {
-        ftp_log(LOG_WARN, "auth failure for user '%s'",
-            sess->pending_user);
-        sess->auth = SESSION_CONNECTED;
+    for (size_t i = 0; i < config->user_count; i++) {
+        const ftp_user_t *user = &config->users[i];
+
+        if (strcmp(sess->pending_user, user->username) != 0)
+            continue;
+        if (!password_matches(cmd->arg, user->password_hash))
+            break;
+
+        sess->auth = SESSION_AUTHED;
+        sess->user = user;
+        ftp_strlcpy(sess->home_root, user->home, sizeof(sess->home_root));
+        ftp_strlcpy(sess->cwd, "/", sizeof(sess->cwd));
         sess->pending_user[0] = '\0';
-        return ftp_reply_send(sess->ctrl_fd, 530,
-            "Login incorrect");
+        ftp_log(LOG_INFO, "user '%s' logged in", user->username);
+        return ftp_reply_send(sess->ctrl_fd, 230, "User logged in");
     }
 
-    sess->auth = SESSION_AUTHED;
+    ftp_log(LOG_WARN, "auth failure for user '%s'",
+        sess->pending_user);
+    sess->auth = SESSION_CONNECTED;
     sess->pending_user[0] = '\0';
-    ftp_log(LOG_INFO, "user '%s' logged in", config->username);
-    return ftp_reply_send(sess->ctrl_fd, 230, "User logged in");
+    return ftp_reply_send(sess->ctrl_fd, 530,
+        "Login incorrect");
 }
 
 static int
@@ -238,11 +278,18 @@ cmd_cwd(ftp_session_t *sess, const ftp_cmd_t *cmd,
     char new_logical[PATH_BUF_SIZE];
     int n;
 
+    (void)config;
+
     if (cmd->arg_len == 0)
         return ftp_reply_send(sess->ctrl_fd, 501,
             "Syntax error in parameters");
 
-    if (ftp_path_resolve(config->root, sess->cwd, cmd->arg,
+    if (require_perm(sess, FTP_PERM_READ) < 0) {
+        pasv_close(sess);
+        return -1;
+    }
+
+    if (ftp_path_resolve(sess->home_root, sess->cwd, cmd->arg,
             resolved) < 0) {
         return ftp_reply_send(sess->ctrl_fd, 550,
             "Requested action not taken");
@@ -284,11 +331,16 @@ cmd_dele(ftp_session_t *sess, const ftp_cmd_t *cmd,
     char resolved[PATH_BUF_SIZE];
     struct stat st;
 
+    (void)config;
+
     if (cmd->arg_len == 0)
         return ftp_reply_send(sess->ctrl_fd, 501,
             "Syntax error in parameters");
 
-    if (ftp_path_resolve(config->root, sess->cwd, cmd->arg,
+    if (require_perm(sess, FTP_PERM_DELETE) < 0)
+        return -1;
+
+    if (ftp_path_resolve(sess->home_root, sess->cwd, cmd->arg,
             resolved) < 0) {
         return ftp_reply_send(sess->ctrl_fd, 550,
             "Requested action not taken");
@@ -316,11 +368,16 @@ cmd_mkd(ftp_session_t *sess, const ftp_cmd_t *cmd,
 {
     char resolved[PATH_BUF_SIZE];
 
+    (void)config;
+
     if (cmd->arg_len == 0)
         return ftp_reply_send(sess->ctrl_fd, 501,
             "Syntax error in parameters");
 
-    if (ftp_path_resolve(config->root, sess->cwd, cmd->arg,
+    if (require_perm(sess, FTP_PERM_MKDIR) < 0)
+        return -1;
+
+    if (ftp_path_resolve(sess->home_root, sess->cwd, cmd->arg,
             resolved) < 0) {
         return ftp_reply_send(sess->ctrl_fd, 550,
             "Requested action not taken");
@@ -405,6 +462,7 @@ cmd_pasv(ftp_session_t *sess, const ftp_cmd_t *cmd,
     return ftp_reply_sendf(sess->ctrl_fd, 227,
         "Entering Passive Mode (%s)", sess->pasv.pasv_arg);
 }
+
 
 /* ------------------------------------------------------------------ */
 /* Directory listing helpers                                            */
@@ -551,13 +609,20 @@ cmd_list_like(ftp_session_t *sess, const ftp_cmd_t *cmd,
     int data_fd;
     int rc;
 
+    (void)config;
+
     if (!sess->pasv_armed)
         return ftp_reply_send(sess->ctrl_fd, 425,
             "Use PASV first");
 
+    if (require_perm(sess, FTP_PERM_READ) < 0) {
+        pasv_close(sess);
+        return -1;
+    }
+
     target = (cmd->arg_len > 0) ? cmd->arg : sess->cwd;
 
-    if (ftp_path_resolve(config->root, sess->cwd, target,
+    if (ftp_path_resolve(sess->home_root, sess->cwd, target,
             resolved) < 0) {
         pasv_close(sess);
         return ftp_reply_send(sess->ctrl_fd, 550,
@@ -614,9 +679,14 @@ cmd_retr(ftp_session_t *sess, const ftp_cmd_t *cmd,
     int data_fd;
     int rc;
 
+    (void)config;
+
     if (!sess->pasv_armed)
         return ftp_reply_send(sess->ctrl_fd, 425,
             "Use PASV first");
+
+    if (require_perm(sess, FTP_PERM_READ) < 0)
+        return -1;
 
     if (cmd->arg_len == 0) {
         pasv_close(sess);
@@ -624,7 +694,7 @@ cmd_retr(ftp_session_t *sess, const ftp_cmd_t *cmd,
             "Syntax error in parameters");
     }
 
-    if (ftp_path_resolve(config->root, sess->cwd, cmd->arg,
+    if (ftp_path_resolve(sess->home_root, sess->cwd, cmd->arg,
             resolved) < 0) {
         pasv_close(sess);
         return ftp_reply_send(sess->ctrl_fd, 550,
@@ -690,9 +760,16 @@ cmd_stor(ftp_session_t *sess, const ftp_cmd_t *cmd,
     int data_fd;
     int rc;
 
+    (void)config;
+
     if (!sess->pasv_armed)
         return ftp_reply_send(sess->ctrl_fd, 425,
             "Use PASV first");
+
+    if (require_perm(sess, FTP_PERM_WRITE) < 0) {
+        pasv_close(sess);
+        return -1;
+    }
 
     if (cmd->arg_len == 0) {
         pasv_close(sess);
@@ -700,7 +777,7 @@ cmd_stor(ftp_session_t *sess, const ftp_cmd_t *cmd,
             "Syntax error in parameters");
     }
 
-    if (ftp_path_resolve(config->root, sess->cwd, cmd->arg,
+    if (ftp_path_resolve(sess->home_root, sess->cwd, cmd->arg,
             resolved) < 0) {
         pasv_close(sess);
         return ftp_reply_send(sess->ctrl_fd, 550,
@@ -709,7 +786,7 @@ cmd_stor(ftp_session_t *sess, const ftp_cmd_t *cmd,
 
     /*
      * STOR overwrites existing files.  This is the documented policy.
-     * Anonymous uploads are not enabled by design (auth required).
+     * The authenticated user must have write permission.
      */
     dst_fd = open(resolved, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (dst_fd < 0) {

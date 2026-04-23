@@ -4,7 +4,7 @@ Minimal, correct FTP server in C23 (RFC 959).
 
 ## Features
 
-- USER / PASS authentication (static configured credentials)
+- USER / PASS authentication with configured accounts
 - SYST, NOOP, TYPE A / TYPE I
 - PWD, CWD, CDUP, MKD, DELE
 - PASV (passive mode, IPv4 only)
@@ -25,7 +25,7 @@ make
 
 The binary is placed at `build/ftp-server`.
 
-To regenerate IDE tooling, run:
+To regenerate IDE tooling without building the server, run:
 
 ```
 make compile_commands.json
@@ -34,17 +34,78 @@ make compile_commands.json
 This rewrites the checked-in compilation database from the current `Makefile`
 settings, so editors like `clangd` stay aligned with the build flags.
 
+## Configuration
+
+The server is configured with TOML. Each user gets a home directory relative
+to the export root, a password hash, and an explicit permission list.
+
+Example:
+
+```toml
+root = "/srv/ftp"
+bind = "0.0.0.0"
+port = 2121
+pasv_min = 50000
+pasv_max = 50100
+
+[[users]]
+name = "alice"
+hash = "$6$ftpserver$W.gEv68KkenSkpTDtZ/mGL.nun.GJuqzZsXFx5/.XiOhG/gdcWXTAQgexO8jDkHC96G6cN58tliCMrXZtq3iw."
+home = "alice"
+perms = ["read", "write", "delete", "mkdir"]
+
+[[users]]
+name = "bob"
+hash = "$6$ftpserver$S/cjclfGUKh0lhON1MWrQGMbc6bfIaJYICwv6ObI6E.riONdPawFRLolC5RvV7ZcC89dwQRys0WiGqiRBdYGV1"
+home = "shared/reports"
+perms = ["read"]
+```
+
+Permission names are:
+
+- `read` for `LIST`, `NLST`, `RETR`, and `CWD`
+- `write` for `STOR`
+- `delete` for `DELE`
+- `mkdir` for `MKD`
+
+Permission matrix:
+
+| FTP command | Required permission |
+|-------------|---------------------|
+| `LIST` | `read` |
+| `NLST` | `read` |
+| `RETR` | `read` |
+| `CWD` / `CDUP` | `read` |
+| `STOR` | `write` |
+| `DELE` | `delete` |
+| `MKD` | `mkdir` |
+
+Start the server with:
+
+```bash
+build/ftp-server -c server.conf
+```
+
+The `home` path is resolved under `root`, so `bob` can only see files beneath
+`/srv/ftp/shared/reports`.
+
+To generate a password hash for a new user, use:
+
+```bash
+openssl passwd -6 -salt ftpserver 'your-password'
+```
+
+The output is the full hash string to paste after `hash =` in the user table.
+
 ## Usage
 
 ```
-build/ftp-server -r ROOT -u USER -p PASS [-b ADDR] [-P PORT] [-m PASV_MIN] [-M PASV_MAX]
+build/ftp-server -c CONFIG [-b ADDR] [-P PORT] [-m PASV_MIN] [-M PASV_MAX]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-r ROOT` | required | Export root directory |
-| `-u USER` | required | Login username |
-| `-p PASS` | required | Login password |
+| `-c CONFIG` | required | Server configuration file |
 | `-b ADDR` | `0.0.0.0` | Bind address |
 | `-P PORT` | `2121` | Control port |
 | `-m PASV_MIN` | `50000` | Passive port range start |
@@ -54,7 +115,16 @@ build/ftp-server -r ROOT -u USER -p PASS [-b ADDR] [-P PORT] [-m PASV_MIN] [-M P
 
 ```
 mkdir -p /tmp/ftp-root
-build/ftp-server -r /tmp/ftp-root -u alice -p hunter2 -P 2121
+cat > /tmp/ftp-server.conf <<'EOF'
+root = "/tmp/ftp-root"
+
+[[users]]
+name = "alice"
+hash = "$6$ftpserver$W.gEv68KkenSkpTDtZ/mGL.nun.GJuqzZsXFx5/.XiOhG/gdcWXTAQgexO8jDkHC96G6cN58tliCMrXZtq3iw."
+home = "."
+perms = ["read", "write", "delete", "mkdir"]
+EOF
+build/ftp-server -c /tmp/ftp-server.conf -P 2121
 ```
 
 ## Testing
