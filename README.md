@@ -6,13 +6,14 @@ Minimal, correct FTP server in C23 (RFC 959).
 
 - USER / PASS authentication (static configured credentials)
 - SYST, NOOP, TYPE A / TYPE I
-- PWD, CWD, CDUP, MKD
+- PWD, CWD, CDUP, MKD, DELE
 - PASV (passive mode, IPv4 only)
 - LIST, NLST
 - RETR (download), STOR (upload)
 - QUIT
 - Fork-per-session concurrency
 - Filesystem confinement under a configured export root
+- `compile_commands.json` for IDE tooling
 
 ## Build
 
@@ -49,14 +50,26 @@ build/ftp-server -r /tmp/ftp-root -u alice -p hunter2 -P 2121
 
 ## Testing
 
-The server is tested with the companion [ftp-client](https://github.com/ESikich/ftp_client). Client integration tests pass against both the client's own mock servers and the real server.
-
-To run the client test suite:
+The server has its own integration test suite in `tests/`. Each test
+forks and execs the real server binary and exercises it end-to-end
+using the [ftp-client](https://github.com/ESikich/ftp_client) library.
 
 ```
-cd ../ftp_client
-make CFLAGS="-std=c2x -Wall -Wextra -Wpedantic -Werror -O2" test
+make test
 ```
+
+This automatically builds the client library if needed, then runs:
+
+| Test | What it covers |
+|------|----------------|
+| `test_server_greeting` | 220 on connect |
+| `test_server_auth` | login, PWD, QUIT |
+| `test_server_auth_fail` | wrong password → 530 |
+| `test_server_list` | LIST and NLST |
+| `test_server_retr` | download a file; missing file → 550 |
+| `test_server_stor` | upload a file and verify contents |
+| `test_server_dele` | delete a file; missing file → 550 |
+| `test_server_traversal` | `../../etc` escape rejected; cwd unchanged |
 
 To test manually with the client shell:
 
