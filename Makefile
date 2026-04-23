@@ -42,6 +42,9 @@ TEST_BINS := $(patsubst tests/%.c,$(BUILD_DIR)/%,$(TEST_SRCS))
 
 .PHONY: all clean test client-lib
 
+compile_commands.json: Makefile scripts/gen_compile_commands.py
+	@CPP="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" CC="$(CC)" CLIENT_INC="$(CLIENT_INC)" BUILD_DIR="$(BUILD_DIR)" SRCS="$(SRC)" TEST_SRCS="$(TEST_SRCS)" python3 scripts/gen_compile_commands.py > $@
+
 all: $(BIN)
 
 test: $(BIN) client-lib $(TEST_BINS)

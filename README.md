@@ -25,6 +25,15 @@ make
 
 The binary is placed at `build/ftp-server`.
 
+To regenerate IDE tooling, run:
+
+```
+make compile_commands.json
+```
+
+This rewrites the checked-in compilation database from the current `Makefile`
+settings, so editors like `clangd` stay aligned with the build flags.
+
 ## Usage
 
 ```

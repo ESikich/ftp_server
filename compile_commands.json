@@ -1,37 +1,77 @@
 [
     {
-        "directory": "/home/erik/ftp_server",
+        "directory": ".",
         "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/main.o src/main.c",
-        "file": "/home/erik/ftp_server/src/main.c"
+        "file": "src/main.c"
     },
     {
-        "directory": "/home/erik/ftp_server",
+        "directory": ".",
         "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_cmd.o src/ftp_cmd.c",
-        "file": "/home/erik/ftp_server/src/ftp_cmd.c"
+        "file": "src/ftp_cmd.c"
     },
     {
-        "directory": "/home/erik/ftp_server",
+        "directory": ".",
         "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_data.o src/ftp_data.c",
-        "file": "/home/erik/ftp_server/src/ftp_data.c"
+        "file": "src/ftp_data.c"
     },
     {
-        "directory": "/home/erik/ftp_server",
+        "directory": ".",
         "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_log.o src/ftp_log.c",
-        "file": "/home/erik/ftp_server/src/ftp_log.c"
+        "file": "src/ftp_log.c"
     },
     {
-        "directory": "/home/erik/ftp_server",
+        "directory": ".",
         "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_path.o src/ftp_path.c",
-        "file": "/home/erik/ftp_server/src/ftp_path.c"
+        "file": "src/ftp_path.c"
     },
     {
-        "directory": "/home/erik/ftp_server",
+        "directory": ".",
         "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_reply.o src/ftp_reply.c",
-        "file": "/home/erik/ftp_server/src/ftp_reply.c"
+        "file": "src/ftp_reply.c"
     },
     {
-        "directory": "/home/erik/ftp_server",
+        "directory": ".",
         "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_session.o src/ftp_session.c",
-        "file": "/home/erik/ftp_server/src/ftp_session.c"
+        "file": "src/ftp_session.c"
+    },
+    {
+        "directory": ".",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -I../ftp_client/include -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/test_server_greeting.o tests/test_server_greeting.c",
+        "file": "tests/test_server_greeting.c"
+    },
+    {
+        "directory": ".",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -I../ftp_client/include -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/test_server_auth.o tests/test_server_auth.c",
+        "file": "tests/test_server_auth.c"
+    },
+    {
+        "directory": ".",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -I../ftp_client/include -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/test_server_auth_fail.o tests/test_server_auth_fail.c",
+        "file": "tests/test_server_auth_fail.c"
+    },
+    {
+        "directory": ".",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -I../ftp_client/include -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/test_server_list.o tests/test_server_list.c",
+        "file": "tests/test_server_list.c"
+    },
+    {
+        "directory": ".",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -I../ftp_client/include -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/test_server_retr.o tests/test_server_retr.c",
+        "file": "tests/test_server_retr.c"
+    },
+    {
+        "directory": ".",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -I../ftp_client/include -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/test_server_stor.o tests/test_server_stor.c",
+        "file": "tests/test_server_stor.c"
+    },
+    {
+        "directory": ".",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -I../ftp_client/include -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/test_server_dele.o tests/test_server_dele.c",
+        "file": "tests/test_server_dele.c"
+    },
+    {
+        "directory": ".",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -I../ftp_client/include -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/test_server_traversal.o tests/test_server_traversal.c",
+        "file": "tests/test_server_traversal.c"
     }
 ]
