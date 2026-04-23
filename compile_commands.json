@@ -1,0 +1,37 @@
+[
+    {
+        "directory": "/home/erik/ftp_server",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/main.o src/main.c",
+        "file": "/home/erik/ftp_server/src/main.c"
+    },
+    {
+        "directory": "/home/erik/ftp_server",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_cmd.o src/ftp_cmd.c",
+        "file": "/home/erik/ftp_server/src/ftp_cmd.c"
+    },
+    {
+        "directory": "/home/erik/ftp_server",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_data.o src/ftp_data.c",
+        "file": "/home/erik/ftp_server/src/ftp_data.c"
+    },
+    {
+        "directory": "/home/erik/ftp_server",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_log.o src/ftp_log.c",
+        "file": "/home/erik/ftp_server/src/ftp_log.c"
+    },
+    {
+        "directory": "/home/erik/ftp_server",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_path.o src/ftp_path.c",
+        "file": "/home/erik/ftp_server/src/ftp_path.c"
+    },
+    {
+        "directory": "/home/erik/ftp_server",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_reply.o src/ftp_reply.c",
+        "file": "/home/erik/ftp_server/src/ftp_reply.c"
+    },
+    {
+        "directory": "/home/erik/ftp_server",
+        "command": "cc -D_GNU_SOURCE -Iinclude -Isrc -std=c2x -Wall -Wextra -Wpedantic -Werror -O2 -c -o build/ftp_session.o src/ftp_session.c",
+        "file": "/home/erik/ftp_server/src/ftp_session.c"
+    }
+]

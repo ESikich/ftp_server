@@ -278,6 +278,39 @@ cmd_cwd(ftp_session_t *sess, const ftp_cmd_t *cmd,
 }
 
 static int
+cmd_dele(ftp_session_t *sess, const ftp_cmd_t *cmd,
+    const ftp_config_t *config)
+{
+    char resolved[PATH_BUF_SIZE];
+    struct stat st;
+
+    if (cmd->arg_len == 0)
+        return ftp_reply_send(sess->ctrl_fd, 501,
+            "Syntax error in parameters");
+
+    if (ftp_path_resolve(config->root, sess->cwd, cmd->arg,
+            resolved) < 0) {
+        return ftp_reply_send(sess->ctrl_fd, 550,
+            "Requested action not taken");
+    }
+
+    if (lstat(resolved, &st) < 0)
+        return ftp_reply_send(sess->ctrl_fd, 550,
+            "No such file or directory");
+
+    if (!S_ISREG(st.st_mode))
+        return ftp_reply_send(sess->ctrl_fd, 550,
+            "Not a regular file");
+
+    if (unlink(resolved) < 0)
+        return ftp_reply_send(sess->ctrl_fd, 550,
+            "Failed to delete file");
+
+    ftp_log(LOG_INFO, "DELE %s ok", resolved);
+    return ftp_reply_send(sess->ctrl_fd, 250, "File deleted");
+}
+
+static int
 cmd_mkd(ftp_session_t *sess, const ftp_cmd_t *cmd,
     const ftp_config_t *config)
 {
@@ -761,6 +794,8 @@ dispatch(ftp_session_t *sess, const ftp_cmd_t *cmd,
         return cmd_cdup(sess, cmd, config);
     if (strcmp(v, "MKD") == 0 || strcmp(v, "XMKD") == 0)
         return cmd_mkd(sess, cmd, config);
+    if (strcmp(v, "DELE") == 0)
+        return cmd_dele(sess, cmd, config);
     if (strcmp(v, "PASV") == 0)
         return cmd_pasv(sess, cmd, config);
     if (strcmp(v, "LIST") == 0)
