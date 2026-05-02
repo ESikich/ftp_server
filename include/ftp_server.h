@@ -196,7 +196,6 @@ int ftp_pasv_accept(int pasv_listen_fd, int timeout_ms);
  * Returns 0 on success, -1 on error.
  */
 int ftp_data_copy(int dst_fd, int src_fd, int timeout_ms);
-int ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms);
 
 /* ------------------------------------------------------------------ */
 /* Session runner                                                       */

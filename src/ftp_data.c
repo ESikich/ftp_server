@@ -28,6 +28,9 @@ wait_fd(int fd, short events, int timeout_ms)
 }
 
 int
+ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms);
+
+int
 ftp_pasv_listen(uint16_t min_port, uint16_t max_port, uint16_t *port_out)
 {
     int fd;
