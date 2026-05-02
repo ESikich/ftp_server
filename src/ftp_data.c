@@ -165,10 +165,6 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
             off += (size_t)nw;
         }
 
-        if ((size_t)nr < sizeof(buf)) {
-            ftp_log(LOG_INFO, "STOR data copy short read complete");
-            return 0;
-        }
     }
 
     ftp_log(LOG_INFO, "STOR data copy end");
