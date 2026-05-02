@@ -1031,12 +1031,13 @@ dispatch(ftp_session_t *sess, const ftp_cmd_t *cmd,
 /* Session runner                                                       */
 /* ------------------------------------------------------------------ */
 
-void
-ftp_session_run(int ctrl_fd, const ftp_config_t *config)
+int
+ftp_session_serve(int ctrl_fd, const ftp_config_t *config)
 {
     ftp_session_t sess;
     ftp_cmd_t cmd;
     int rc;
+    int status = 0;
 
     memset(&sess, 0, sizeof(sess));
     sess.ctrl_fd    = ctrl_fd;
@@ -1056,12 +1057,15 @@ ftp_session_run(int ctrl_fd, const ftp_config_t *config)
             if (errno == ETIMEDOUT)
                 ftp_reply_send(ctrl_fd, 421,
                     "Service not available, closing control connection");
+            status = -1;
             break;
         }
 
         rc = dispatch(&sess, &cmd, config);
-        if (rc < 0)
+        if (rc < 0) {
+            status = -1;
             break;
+        }
 
         if (sess.auth == SESSION_CLOSING)
             break;
@@ -1070,5 +1074,12 @@ ftp_session_run(int ctrl_fd, const ftp_config_t *config)
 done:
     pasv_close(&sess);
     close(ctrl_fd);
+    return status;
+}
+
+void
+ftp_session_run(int ctrl_fd, const ftp_config_t *config)
+{
+    (void)ftp_session_serve(ctrl_fd, config);
     exit(0);
 }
