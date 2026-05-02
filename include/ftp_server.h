@@ -203,14 +203,8 @@ int ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms);
 /* ------------------------------------------------------------------ */
 
 /*
- * Serve one FTP session on ctrl_fd using config.
- * Closes ctrl_fd before returning.
- */
-int ftp_session_serve(int ctrl_fd, const ftp_config_t *config);
-
-/*
- * Run one FTP session on ctrl_fd using config, then exit.
- * This is the forked Unix server child entry point.
+ * Run one FTP session on ctrl_fd using config.
+ * Never returns on success (the child process exits).
  */
 _Noreturn void ftp_session_run(int ctrl_fd, const ftp_config_t *config);
 
