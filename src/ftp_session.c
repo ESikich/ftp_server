@@ -17,6 +17,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#define STOR_XFER_MS 1000
+
 /* ------------------------------------------------------------------ */
 /* I/O helpers                                                          */
 /* ------------------------------------------------------------------ */
@@ -25,6 +27,35 @@ static ssize_t __attribute__((noinline))
 read_exact(int fd, void *buf, size_t len)
 {
     return read(fd, buf, len);
+}
+
+static int
+write_all(int fd, const char *buf, size_t len)
+{
+    size_t done;
+    ssize_t rc;
+
+    done = 0;
+    while (done < len) {
+        rc = write(fd, buf + done, len - done);
+        if (rc < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (rc == 0) {
+            errno = EPIPE;
+            return -1;
+        }
+        done += (size_t)rc;
+    }
+    return 0;
+}
+
+static int
+send_raw_reply(int fd, const char *s)
+{
+    return write_all(fd, s, strlen(s));
 }
 
 static int
@@ -89,8 +120,9 @@ read_command(ftp_session_t *sess, ftp_cmd_t *cmd, int timeout_ms)
 
         rc = wait_readable(sess->ctrl_fd, timeout_ms);
         if (rc <= 0) {
-            if (rc == 0)
+            if (rc == 0) {
                 errno = ETIMEDOUT;
+            }
             return -1;
         }
 
@@ -102,6 +134,7 @@ read_command(ftp_session_t *sess, ftp_cmd_t *cmd, int timeout_ms)
         if (nr < 0) {
             if (errno == EINTR)
                 continue;
+            ftp_log(LOG_ERROR, "control read failed: %s", strerror(errno));
             return -1;
         }
         if (nr == 0) {
@@ -224,6 +257,7 @@ cmd_noop(ftp_session_t *sess, const ftp_cmd_t *cmd,
 {
     (void)cmd;
     (void)config;
+    ftp_log(LOG_INFO, "NOOP");
     return ftp_reply_send(sess->ctrl_fd, 200, "OK");
 }
 
@@ -233,7 +267,48 @@ cmd_syst(ftp_session_t *sess, const ftp_cmd_t *cmd,
 {
     (void)cmd;
     (void)config;
+    ftp_log(LOG_INFO, "SYST");
     return ftp_reply_send(sess->ctrl_fd, 215, "UNIX Type: L8");
+}
+
+static int
+cmd_feat(ftp_session_t *sess, const ftp_cmd_t *cmd,
+    const ftp_config_t *config)
+{
+    (void)cmd;
+    (void)config;
+    ftp_log(LOG_INFO, "FEAT");
+
+    /*
+     * FEAT is a multiline reply.  Some clients (notably FileZilla)
+     * parse this strictly, so we must emit the proper RFC-style
+     * 211-... / 211 ... framing instead of a single folded line.
+     */
+    if (send_raw_reply(sess->ctrl_fd, "211-Features:\r\n") < 0)
+        return -1;
+    if (send_raw_reply(sess->ctrl_fd, " UTF8\r\n") < 0)
+        return -1;
+    if (send_raw_reply(sess->ctrl_fd, "211 End\r\n") < 0)
+        return -1;
+    return 0;
+}
+
+static int
+cmd_opts(ftp_session_t *sess, const ftp_cmd_t *cmd,
+    const ftp_config_t *config)
+{
+    (void)config;
+    ftp_log(LOG_INFO, "OPTS %s", cmd->arg);
+
+    if (cmd->arg_len == 0)
+        return ftp_reply_send(sess->ctrl_fd, 501,
+            "Syntax error in parameters");
+
+    if (strcmp(cmd->arg, "UTF8 ON") == 0)
+        return ftp_reply_send(sess->ctrl_fd, 200, "UTF8 enabled");
+
+    return ftp_reply_send(sess->ctrl_fd, 501,
+        "Unsupported option");
 }
 
 static int
@@ -241,6 +316,7 @@ cmd_type(ftp_session_t *sess, const ftp_cmd_t *cmd,
     const ftp_config_t *config)
 {
     (void)config;
+    ftp_log(LOG_INFO, "TYPE %s", cmd->arg);
 
     if (cmd->arg_len == 0)
         return ftp_reply_send(sess->ctrl_fd, 501,
@@ -266,6 +342,7 @@ cmd_pwd(ftp_session_t *sess, const ftp_cmd_t *cmd,
 {
     (void)cmd;
     (void)config;
+    ftp_log(LOG_INFO, "PWD -> %s", sess->cwd);
     return ftp_reply_sendf(sess->ctrl_fd, 257, "\"%s\"", sess->cwd);
 }
 
@@ -279,6 +356,7 @@ cmd_cwd(ftp_session_t *sess, const ftp_cmd_t *cmd,
     int n;
 
     (void)config;
+    ftp_log(LOG_INFO, "CWD %s", cmd->arg);
 
     if (cmd->arg_len == 0)
         return ftp_reply_send(sess->ctrl_fd, 501,
@@ -397,12 +475,51 @@ cmd_mkd(ftp_session_t *sess, const ftp_cmd_t *cmd,
 }
 
 static int
+cmd_rmd(ftp_session_t *sess, const ftp_cmd_t *cmd,
+    const ftp_config_t *config)
+{
+    char resolved[PATH_BUF_SIZE];
+    struct stat st;
+
+    (void)config;
+
+    if (cmd->arg_len == 0)
+        return ftp_reply_send(sess->ctrl_fd, 501,
+            "Syntax error in parameters");
+
+    if (require_perm(sess, FTP_PERM_DELETE) < 0)
+        return -1;
+
+    if (ftp_path_resolve(sess->home_root, sess->cwd, cmd->arg,
+            resolved) < 0) {
+        return ftp_reply_send(sess->ctrl_fd, 550,
+            "Requested action not taken");
+    }
+
+    if (lstat(resolved, &st) < 0)
+        return ftp_reply_send(sess->ctrl_fd, 550,
+            "No such file or directory");
+
+    if (!S_ISDIR(st.st_mode))
+        return ftp_reply_send(sess->ctrl_fd, 550,
+            "Not a directory");
+
+    if (rmdir(resolved) < 0)
+        return ftp_reply_send(sess->ctrl_fd, 550,
+            "Failed to remove directory");
+
+    ftp_log(LOG_INFO, "RMD %s ok", resolved);
+    return ftp_reply_send(sess->ctrl_fd, 250, "Directory removed");
+}
+
+static int
 cmd_cdup(ftp_session_t *sess, const ftp_cmd_t *cmd,
     const ftp_config_t *config)
 {
     ftp_cmd_t up;
 
     (void)cmd;
+    ftp_log(LOG_INFO, "CDUP");
     memset(&up, 0, sizeof(up));
     ftp_strlcpy(up.verb, "CWD", sizeof(up.verb));
     ftp_strlcpy(up.arg, "..", sizeof(up.arg));
@@ -422,6 +539,7 @@ cmd_pasv(ftp_session_t *sess, const ftp_cmd_t *cmd,
     int listen_fd;
 
     (void)cmd;
+    ftp_log(LOG_INFO, "PASV request");
 
     /* replace any previously armed passive listener */
     pasv_close(sess);
@@ -433,6 +551,7 @@ cmd_pasv(ftp_session_t *sess, const ftp_cmd_t *cmd,
         return ftp_reply_send(sess->ctrl_fd, 425,
             "Can't open data connection");
     }
+    ftp_log(LOG_INFO, "PASV listening on %u", (unsigned)port);
 
     /*
      * Report the control connection's local IP address.
@@ -610,6 +729,8 @@ cmd_list_like(ftp_session_t *sess, const ftp_cmd_t *cmd,
     int rc;
 
     (void)config;
+    ftp_log(LOG_INFO, "%s %s", nlst ? "NLST" : "LIST",
+        (cmd->arg_len > 0) ? cmd->arg : sess->cwd);
 
     if (!sess->pasv_armed)
         return ftp_reply_send(sess->ctrl_fd, 425,
@@ -620,7 +741,16 @@ cmd_list_like(ftp_session_t *sess, const ftp_cmd_t *cmd,
         return -1;
     }
 
-    target = (cmd->arg_len > 0) ? cmd->arg : sess->cwd;
+    /*
+     * Many GUI clients send "LIST -a" to request hidden entries.
+     * We do not implement LIST options, but we can accept the common
+     * form by ignoring option-style arguments and listing the current
+     * directory instead of treating "-a" as a literal path.
+     */
+    if (cmd->arg_len > 0 && cmd->arg[0] == '-')
+        target = sess->cwd;
+    else
+        target = (cmd->arg_len > 0) ? cmd->arg : sess->cwd;
 
     if (ftp_path_resolve(sess->home_root, sess->cwd, target,
             resolved) < 0) {
@@ -650,7 +780,6 @@ cmd_list_like(ftp_session_t *sess, const ftp_cmd_t *cmd,
     pasv_close(sess);
 
     if (data_fd < 0) {
-        ftp_log(LOG_ERROR, "pasv accept failed: %s", strerror(errno));
         return ftp_reply_send(sess->ctrl_fd, 425,
             "Can't open data connection");
     }
@@ -680,6 +809,7 @@ cmd_retr(ftp_session_t *sess, const ftp_cmd_t *cmd,
     int rc;
 
     (void)config;
+    ftp_log(LOG_INFO, "RETR %s", (cmd->arg_len > 0) ? cmd->arg : "(missing)");
 
     if (!sess->pasv_armed)
         return ftp_reply_send(sess->ctrl_fd, 425,
@@ -731,7 +861,6 @@ cmd_retr(ftp_session_t *sess, const ftp_cmd_t *cmd,
 
     if (data_fd < 0) {
         close(src_fd);
-        ftp_log(LOG_ERROR, "pasv accept failed: %s", strerror(errno));
         return ftp_reply_send(sess->ctrl_fd, 425,
             "Can't open data connection");
     }
@@ -761,6 +890,7 @@ cmd_stor(ftp_session_t *sess, const ftp_cmd_t *cmd,
     int rc;
 
     (void)config;
+    ftp_log(LOG_INFO, "STOR %s", (cmd->arg_len > 0) ? cmd->arg : "(missing)");
 
     if (!sess->pasv_armed)
         return ftp_reply_send(sess->ctrl_fd, 425,
@@ -807,12 +937,11 @@ cmd_stor(ftp_session_t *sess, const ftp_cmd_t *cmd,
 
     if (data_fd < 0) {
         close(dst_fd);
-        ftp_log(LOG_ERROR, "pasv accept failed: %s", strerror(errno));
         return ftp_reply_send(sess->ctrl_fd, 425,
             "Can't open data connection");
     }
 
-    rc = ftp_data_copy(dst_fd, data_fd, DATA_XFER_MS);
+    rc = ftp_data_copy_upload(dst_fd, data_fd, STOR_XFER_MS);
     close(data_fd);
     close(dst_fd);
 
@@ -844,6 +973,10 @@ dispatch(ftp_session_t *sess, const ftp_cmd_t *cmd,
 
     v = cmd->verb;
     authed = (sess->auth == SESSION_AUTHED);
+    ftp_log(LOG_INFO, "cmd %s%s%s",
+        cmd->verb,
+        cmd->arg_len > 0 ? " " : "",
+        cmd->arg_len > 0 ? cmd->arg : "");
 
     /* pre-auth allowed set */
     if (strcmp(v, "USER") == 0)
@@ -861,6 +994,10 @@ dispatch(ftp_session_t *sess, const ftp_cmd_t *cmd,
 
     if (strcmp(v, "SYST") == 0)
         return cmd_syst(sess, cmd, config);
+    if (strcmp(v, "FEAT") == 0)
+        return cmd_feat(sess, cmd, config);
+    if (strcmp(v, "OPTS") == 0)
+        return cmd_opts(sess, cmd, config);
     if (strcmp(v, "TYPE") == 0)
         return cmd_type(sess, cmd, config);
     if (strcmp(v, "PWD") == 0 || strcmp(v, "XPWD") == 0)
@@ -871,6 +1008,8 @@ dispatch(ftp_session_t *sess, const ftp_cmd_t *cmd,
         return cmd_cdup(sess, cmd, config);
     if (strcmp(v, "MKD") == 0 || strcmp(v, "XMKD") == 0)
         return cmd_mkd(sess, cmd, config);
+    if (strcmp(v, "RMD") == 0 || strcmp(v, "XRMD") == 0)
+        return cmd_rmd(sess, cmd, config);
     if (strcmp(v, "DELE") == 0)
         return cmd_dele(sess, cmd, config);
     if (strcmp(v, "PASV") == 0)
@@ -908,8 +1047,6 @@ ftp_session_run(int ctrl_fd, const ftp_config_t *config)
     ftp_strlcpy(sess.cwd, "/", sizeof(sess.cwd));
     ftp_cmd_parser_init(&sess.parser);
 
-    ftp_log(LOG_INFO, "session start");
-
     if (ftp_reply_send(ctrl_fd, 220, "FTP server ready") < 0)
         goto done;
 
@@ -933,6 +1070,5 @@ ftp_session_run(int ctrl_fd, const ftp_config_t *config)
 done:
     pasv_close(&sess);
     close(ctrl_fd);
-    ftp_log(LOG_INFO, "session end");
     exit(0);
 }

@@ -28,6 +28,9 @@ wait_fd(int fd, short events, int timeout_ms)
 }
 
 int
+ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms);
+
+int
 ftp_pasv_listen(uint16_t min_port, uint16_t max_port, uint16_t *port_out)
 {
     int fd;
@@ -99,19 +102,37 @@ ftp_pasv_accept(int pasv_listen_fd, int timeout_ms)
 int
 ftp_data_copy(int dst_fd, int src_fd, int timeout_ms)
 {
+    return ftp_data_copy_upload(dst_fd, src_fd, timeout_ms);
+}
+
+int
+ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
+{
     char buf[65536];
     ssize_t nr;
     ssize_t nw;
     size_t off;
+    int saw_data = 0;
 
+    ftp_log(LOG_INFO, "STOR data copy begin");
     for (;;) {
         int rc;
 
-        rc = wait_fd(src_fd, POLLIN, timeout_ms);
+        /*
+         * Uploads often finish with a peer hangup rather than another
+         * readable byte.  Treat POLLHUP as a wakeup so STOR can observe
+         * EOF promptly instead of waiting for the timeout.
+         */
+        rc = wait_fd(src_fd, POLLIN | POLLHUP, timeout_ms);
         if (rc < 0)
             return -1;
         if (rc == 0) {
+            if (saw_data) {
+                ftp_log(LOG_INFO, "STOR data copy quiet timeout");
+                return 0;
+            }
             errno = ETIMEDOUT;
+            ftp_log(LOG_WARN, "STOR data copy timeout before data");
             return -1;
         }
 
@@ -122,26 +143,34 @@ ftp_data_copy(int dst_fd, int src_fd, int timeout_ms)
             return -1;
         }
         if (nr == 0)
+        {
+            ftp_log(LOG_INFO, "STOR data copy EOF");
             break;
+        }
+        saw_data = 1;
+        ftp_log(LOG_INFO, "STOR data copy read %ld bytes", (long)nr);
 
         off = 0;
         while (off < (size_t)nr) {
-            rc = wait_fd(dst_fd, POLLOUT, timeout_ms);
-            if (rc <= 0) {
-                if (rc == 0)
-                    errno = ETIMEDOUT;
-                return -1;
-            }
-
             nw = write(dst_fd, buf + off, (size_t)nr - off);
             if (nw < 0) {
                 if (errno == EINTR)
                     continue;
                 return -1;
             }
+            if (nw == 0) {
+                errno = EIO;
+                return -1;
+            }
             off += (size_t)nw;
+        }
+
+        if ((size_t)nr < sizeof(buf)) {
+            ftp_log(LOG_INFO, "STOR data copy short read complete");
+            return 0;
         }
     }
 
+    ftp_log(LOG_INFO, "STOR data copy end");
     return 0;
 }
