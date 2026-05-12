@@ -126,12 +126,11 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
         if (rc < 0)
             return -1;
         if (rc == 0) {
-            if (saw_data) {
-                ftp_log(LOG_INFO, "STOR data copy quiet timeout");
-                return 0;
-            }
             errno = ETIMEDOUT;
-            ftp_log(LOG_WARN, "STOR data copy timeout before data");
+            ftp_log(LOG_WARN, saw_data ?
+                "STOR data copy timeout after %lu bytes" :
+                "STOR data copy timeout before data",
+                (unsigned long)total);
             return -1;
         }
 
