@@ -109,8 +109,10 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
     ssize_t nr;
     ssize_t nw;
     size_t off;
+    size_t total;
     int saw_data = 0;
 
+    total = 0;
     ftp_log(LOG_INFO, "STOR data copy begin");
     for (;;) {
         int rc;
@@ -145,7 +147,7 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
             break;
         }
         saw_data = 1;
-        ftp_log(LOG_INFO, "STOR data copy read %ld bytes", (long)nr);
+        total += (size_t)nr;
 
         off = 0;
         while (off < (size_t)nr) {
@@ -164,6 +166,6 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
 
     }
 
-    ftp_log(LOG_INFO, "STOR data copy end");
+    ftp_log(LOG_INFO, "STOR data copy end: %lu bytes", (unsigned long)total);
     return 0;
 }
