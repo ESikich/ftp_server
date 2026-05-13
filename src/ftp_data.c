@@ -107,11 +107,11 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
 {
     char buf[65536];
     ssize_t nr;
-    ssize_t nw;
-    size_t off;
+    size_t used;
     size_t total;
     int saw_data = 0;
 
+    used = 0;
     total = 0;
     ftp_log(LOG_INFO, "STOR data copy begin");
     for (;;) {
@@ -134,7 +134,7 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
             return -1;
         }
 
-        nr = read(src_fd, buf, sizeof(buf));
+        nr = read(src_fd, buf + used, sizeof(buf) - used);
         if (nr < 0) {
             if (errno == EINTR)
                 continue;
@@ -147,10 +147,38 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
         }
         saw_data = 1;
         total += (size_t)nr;
+        used += (size_t)nr;
 
-        off = 0;
-        while (off < (size_t)nr) {
-            nw = write(dst_fd, buf + off, (size_t)nr - off);
+        if (used == sizeof(buf)) {
+            size_t off = 0;
+
+            while (off < used) {
+                ssize_t nw;
+
+                nw = write(dst_fd, buf + off, used - off);
+                if (nw < 0) {
+                    if (errno == EINTR)
+                        continue;
+                    return -1;
+                }
+                if (nw == 0) {
+                    errno = EIO;
+                    return -1;
+                }
+                off += (size_t)nw;
+            }
+            used = 0;
+        }
+
+    }
+
+    if (used > 0) {
+        size_t off = 0;
+
+        while (off < used) {
+            ssize_t nw;
+
+            nw = write(dst_fd, buf + off, used - off);
             if (nw < 0) {
                 if (errno == EINTR)
                     continue;
@@ -162,7 +190,6 @@ ftp_data_copy_upload(int dst_fd, int src_fd, int timeout_ms)
             }
             off += (size_t)nw;
         }
-
     }
 
     ftp_log(LOG_INFO, "STOR data copy end: %lu bytes", (unsigned long)total);

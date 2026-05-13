@@ -259,6 +259,8 @@ consistent.
 ### Upload (STOR)
 
 - Streams from the data socket into a server-side file
+- Buffers socket reads into larger file writes so slow filesystems are not
+  forced to commit every TCP-sized fragment separately
 - Creates or truncates conservatively according to documented policy
 - Partial uploads on failure are cleaned up or left in a documented,
   conservative state
